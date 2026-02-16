@@ -1,0 +1,56 @@
+{
+  "providers": {
+    "aws": {
+      "enabled": true,
+      "regions": ["us-east-1", "eu-west-1"]
+    },
+    "azure": {
+      "enabled": true
+    },
+    "gcp": {
+      "enabled": true
+    }
+  },
+  "billing": {
+    "aws": {
+      "filePath": "sample-data/aws-billing.csv",
+      "format": "csv",
+      "period": "2024-01"
+    },
+    "azure": {
+      "filePath": "sample-data/azure-billing.csv",
+      "format": "csv",
+      "period": "2024-01"
+    },
+    "gcp": {
+      "filePath": "sample-data/gcp-billing.csv",
+      "format": "csv",
+      "period": "2024-01"
+    }
+  },
+  "syntheticUnits": {
+    "rules": {
+      "VM": {
+        "unitsPerInstance": 5
+      },
+      "Container": {
+        "unitsPerInstance": 2
+      },
+      "Database": {
+        "unitsPerInstance": 5
+      },
+      "Storage": {
+        "unitsPerInstance": 5
+      },
+      "Function": {
+        "unitsPerInstance": 1
+      }
+    }
+  },
+  "output": {
+    "format": "excel",
+    "filename": "cloud-assets-inventory.xlsx",
+    "includeEphemeralResources": true,
+    "includeBillingMetrics": true
+  }
+}

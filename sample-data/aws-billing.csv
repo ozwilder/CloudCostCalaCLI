@@ -1,0 +1,8 @@
+service,resourceType,resourceId,instanceHours,period,region
+EC2,VM,i-1234567890abcdef0,720,2024-01,us-east-1
+EC2,VM,i-0987654321fedcba0,360,2024-01,us-east-1
+RDS,Database,db-primary-1,744,2024-01,us-east-1
+ECS,Container,ecs-task-1,480,2024-01,us-east-1
+Lambda,Function,function-1,1000,2024-01,us-east-1
+S3,Storage,my-bucket,744,2024-01,us-east-1
+EC2,VM,i-abcdef1234567890,240,2024-01,eu-west-1

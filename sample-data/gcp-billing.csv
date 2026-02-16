@@ -1,0 +1,7 @@
+service,resourceType,resourceId,instanceHours,period,region
+Compute Engine,VM,instance-1,744,2024-01,us-central1
+Compute Engine,VM,instance-2,360,2024-01,us-central1
+Cloud SQL,Database,cloudsql-01,744,2024-01,us-central1
+GKE,Container,cluster-1-node-1,600,2024-01,us-central1
+Cloud Functions,Function,function-gcp-1,200,2024-01,us-central1
+Cloud Storage,Storage,my-gcp-bucket,744,2024-01,us-central1

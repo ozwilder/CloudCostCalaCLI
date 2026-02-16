@@ -1,0 +1,7 @@
+service,resourceType,resourceId,instanceHours,period,region
+Virtual Machine,VM,vm-azure-001,744,2024-01,eastus
+Virtual Machine,VM,vm-azure-002,372,2024-01,eastus
+SQL Database,Database,sqldb-01,744,2024-01,eastus
+Container Instance,Container,container-001,480,2024-01,eastus
+Azure Function,Function,func-001,500,2024-01,eastus
+Storage Account,Storage,storage001,744,2024-01,eastus
