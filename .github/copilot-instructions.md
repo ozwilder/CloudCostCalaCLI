@@ -9,7 +9,11 @@ CloudCostCalaCLI is a Go-based CLI tool that scans and discovers all cloud asset
 
 The tool translates real cloud infrastructure into abstract "credit units" to help customers plan budgets and allocate resources.
 
-## Synthetic Units Conversion Rules
+Synthetic unit conversion rules are **configured in the config file**, making the tool flexible for different pricing models and customer requirements.
+
+## Synthetic Units Model
+
+Synthetic units are customer-specific conversion rules that translate cloud assets into abstract credit points. The default model is:
 
 | Asset Type | Conversion Rule |
 |------------|-----------------|
@@ -18,6 +22,8 @@ The tool translates real cloud infrastructure into abstract "credit units" to he
 | **Storage** | Per storage unit = 5 units |
 | **Database** (SQL, NoSQL, etc.) | 1 DB = 5 units |
 | **Serverless** (Functions, Lambda, etc.) | Per 10 functions = 5 units |
+
+Rules are defined in the config file and can be customized per customer.
 
 ## Development Setup
 
@@ -64,20 +70,19 @@ CloudCostCalaCLI/
 │   ├── assets/                     # Asset model & aggregation
 │   │   ├── types.go               # Asset types (VM, DB, Container, etc.)
 │   │   ├── aggregator.go          # Combine assets across projects/subscriptions
-│   │   └── converter.go           # Convert assets to synthetic units
+│   │   └── converter.go           # Data-driven converter using config rules
 │   ├── config/
-│   │   ├── config.go
-│   │   └── loader.go
+│   │   ├── config.go              # Config struct definitions
+│   │   └── loader.go              # Load and validate config file
 │   └── models/
-│       ├── asset.go               # Core asset struct
-│       └── synthetic_unit.go      # Synthetic unit calculation
+│       └── asset.go               # Core asset struct
 ├── pkg/
 │   ├── output/
-│   │   ├── excel.go              # Excel file generation (xls/xlsx)
+│   │   ├── excel.go              # Excel file generation (.xlsx)
 │   │   └── formatter.go          # Format assets for output
 │   └── discovery/
 │       └── scanner.go            # Discovery orchestration across providers
-├── config.example.json            # Example config with cloud credentials
+├── config.example.json            # Example config with conversion rules
 ├── go.mod
 ├── go.sum
 ├── Makefile
@@ -154,41 +159,79 @@ type CloudProvider interface {
 
 // Asset is the common internal representation
 type Asset struct {
-    ID              string     // Unique asset ID
-    Type            string     // VM, Database, Container, Storage, Function
+    ID              string                 // Unique asset ID
+    Type            string                 // VM, Database, Container, Storage, Function
     Name            string
-    Cloud           string     // AWS, Azure, GCP
-    Project         string     // Project ID, Subscription ID, etc.
-    Count           int        // Number of instances/units
+    Cloud           string                 // AWS, Azure, GCP
+    Project         string                 // Project ID, Subscription ID, etc.
+    Count           int                    // Number of instances/units
     Metadata        map[string]interface{} // vCores, storage size, etc.
 }
 ```
 
-### Synthetic Unit Conversion
+### Synthetic Unit Conversion (Config-Driven)
+
+The conversion rules are loaded from the config file, making the converter data-driven:
 
 ```go
 // internal/assets/converter.go
 package assets
 
-func ConvertToSyntheticUnits(asset Asset) int {
-    switch asset.Type {
-    case "VM":
-        return 5 * asset.Count
-    case "Container":
-        vCores := asset.Metadata["vCores"].(int)
-        return int(math.Max(2, float64(vCores/4))) * asset.Count
-    case "Database":
-        return 5 * asset.Count
-    case "Storage":
-        return 5 * asset.Count
-    case "Function":
-        // Per 10 functions = 5 units
-        return (asset.Count + 9) / 10 * 5
-    default:
-        return 0
+import "github.com/ozwilder/CloudCostCalaCLI/internal/config"
+
+// ConvertToSyntheticUnits uses config rules to convert assets to units
+func ConvertToSyntheticUnits(asset Asset, rules config.SyntheticUnitRules) int {
+    rule, exists := rules[asset.Type]
+    if !exists {
+        return 0 // Unknown asset type
     }
+    
+    // Apply rule calculation (base formula may vary per rule)
+    return rule.Calculate(asset)
 }
 ```
+
+The config file defines conversion rules per asset type:
+
+```json
+{
+  "syntheticUnits": {
+    "rules": {
+      "VM": {
+        "type": "fixed",
+        "unitsPerInstance": 5
+      },
+      "Container": {
+        "type": "variable",
+        "baseUnit": 4,
+        "unitsPerBase": 2,
+        "minimum": 2,
+        "maximumvCores": 16,
+        "metadataKey": "vCores"
+      },
+      "Database": {
+        "type": "fixed",
+        "unitsPerInstance": 5
+      },
+      "Storage": {
+        "type": "fixed",
+        "unitsPerInstance": 5
+      },
+      "Function": {
+        "type": "batch",
+        "batchSize": 10,
+        "unitsPerBatch": 5
+      }
+    }
+  }
+}
+```
+
+This approach allows:
+- Different conversion rules per customer
+- Easy rule updates without code changes
+- Clear rule documentation in config
+- Testing different pricing models
 
 ### Asset Aggregation
 
@@ -198,10 +241,10 @@ package assets
 
 // AggregateAssets combines assets across all projects/subscriptions/resource groups
 // Groups by asset type and sums instances
-func AggregateAssets(assets []Asset) map[string]AggregatedAsset {
+func AggregateAssets(assets []Asset, rules config.SyntheticUnitRules) map[string]AggregatedAsset {
     // Group by type
     // Sum instances per type
-    // Calculate total synthetic units
+    // Calculate total synthetic units using config rules
 }
 
 type AggregatedAsset struct {
@@ -230,6 +273,12 @@ func WriteExcel(filename string, assets []AggregatedAsset) error {
 ## Configuration Management
 
 ### Configuration File (JSON)
+
+The config file is the single source of truth for:
+1. Cloud provider credentials
+2. Synthetic unit conversion rules
+3. Output settings
+
 ```json
 {
   "providers": {
@@ -252,6 +301,35 @@ func WriteExcel(filename string, assets []AggregatedAsset) error {
       "service_account_key": "***"
     }
   },
+  "syntheticUnits": {
+    "rules": {
+      "VM": {
+        "type": "fixed",
+        "unitsPerInstance": 5
+      },
+      "Container": {
+        "type": "variable",
+        "baseUnit": 4,
+        "unitsPerBase": 2,
+        "minimum": 2,
+        "maximumvCores": 16,
+        "metadataKey": "vCores"
+      },
+      "Database": {
+        "type": "fixed",
+        "unitsPerInstance": 5
+      },
+      "Storage": {
+        "type": "fixed",
+        "unitsPerInstance": 5
+      },
+      "Function": {
+        "type": "batch",
+        "batchSize": 10,
+        "unitsPerBatch": 5
+      }
+    }
+  },
   "output": {
     "format": "excel",
     "filename": "cloud-assets-inventory.xlsx"
@@ -262,7 +340,41 @@ func WriteExcel(filename string, assets []AggregatedAsset) error {
 ### CLI Flags
 ```bash
 cloudcostcala --config config.json --output assets.xlsx
-cloudcostcala --aws-key *** --azure-subscription *** --output assets.xlsx
+cloudcostcala --config /etc/cloudcostcala/prod-config.json
+```
+
+### Config Loading & Validation
+
+```go
+// internal/config/config.go
+package config
+
+type SyntheticUnitRule struct {
+    Type              string                 // "fixed", "variable", "batch"
+    UnitsPerInstance  int                    // For fixed rules
+    BaseUnit          int                    // For variable rules
+    UnitsPerBase      int                    // For variable rules
+    Minimum           int                    // Minimum units (for variable rules)
+    MaximumVCores     int                    // Cap vCores (for container rules)
+    BatchSize         int                    // For batch rules
+    UnitsPerBatch     int                    // For batch rules
+    MetadataKey       string                 // Which metadata field to use
+}
+
+type SyntheticUnitsConfig struct {
+    Rules map[string]SyntheticUnitRule
+}
+
+type Config struct {
+    Providers      ProvidersConfig
+    SyntheticUnits SyntheticUnitsConfig
+    Output         OutputConfig
+}
+
+// ValidateRules ensures all required asset types have rules defined
+func (s *SyntheticUnitsConfig) ValidateRules() error {
+    // Check that all expected asset types have rules
+}
 ```
 
 ## Dependencies to Consider
@@ -272,19 +384,24 @@ cloudcostcala --aws-key *** --azure-subscription *** --output assets.xlsx
 - **GCP SDK**: `cloud.google.com/go`
 - **CLI Framework**: `github.com/spf13/cobra` (for complex CLI)
 - **Excel**: `github.com/xuri/excelize` (for .xlsx generation)
-- **Config**: `github.com/spf13/viper` (for config file management)
+- **Config**: `github.com/spf13/viper` or standard `encoding/json`
 - **Logging**: `go.uber.org/zap` or standard `log`
 - **Testing**: `github.com/stretchr/testify` (assertions)
 
 ## Testing Strategy
 
-- **Unit Tests**: Test synthetic unit conversion with different asset types
-- **Integration Tests**: Mock cloud provider APIs to test discovery flow
-- **Mock Providers**: Create mock implementations of CloudProvider for testing
+- **Unit Tests**: Test synthetic unit conversion with different rule types and asset configurations
+- **Config Tests**: Validate config file loading and rule parsing
+- **Integration Tests**: Mock cloud provider APIs to test discovery flow with real config
 
 ```go
-// Example test for synthetic unit conversion
-func TestSyntheticUnitConversion(t *testing.T) {
+// Example test for config-driven synthetic unit conversion
+func TestSyntheticUnitConversionWithConfig(t *testing.T) {
+    rules := config.SyntheticUnitRules{
+        "VM": {Type: "fixed", UnitsPerInstance: 5},
+        "Container": {Type: "variable", BaseUnit: 4, UnitsPerBase: 2, Minimum: 2},
+    }
+    
     tests := []struct {
         asset    Asset
         expected int
@@ -292,12 +409,10 @@ func TestSyntheticUnitConversion(t *testing.T) {
         {Asset{Type: "VM", Count: 1}, 5},
         {Asset{Type: "VM", Count: 3}, 15},
         {Asset{Type: "Container", Count: 1, Metadata: map[string]interface{}{"vCores": 4}}, 2},
-        {Asset{Type: "Function", Count: 10}, 5},
-        {Asset{Type: "Function", Count: 15}, 10},
     }
     
     for _, tt := range tests {
-        result := ConvertToSyntheticUnits(tt.asset)
+        result := ConvertToSyntheticUnits(tt.asset, rules)
         assert.Equal(t, tt.expected, result)
     }
 }
@@ -306,21 +421,21 @@ func TestSyntheticUnitConversion(t *testing.T) {
 ## Documentation
 
 - **README.md**: Quick start, installation, basic usage examples with output samples
-- **config.example.json**: Well-commented configuration template
+- **config.example.json**: Well-commented configuration template with all rule types
 - **docs/ARCHITECTURE.md**: Asset discovery flow, aggregation strategy
-- **docs/SYNTHETIC_UNITS.md**: Detailed explanation of synthetic unit model
+- **docs/SYNTHETIC_UNITS.md**: Detailed explanation of synthetic unit model and rule types
 - **Code Comments**: Document asset types, conversion logic, provider implementations
 
 ## Workflow Overview
 
 ```
-User provides config (cloud credentials)
+User provides config (credentials + conversion rules)
   ↓
 CLI discovers assets across all clouds/projects/subscriptions
   ↓
 Assets aggregated by type (VM, Database, Container, etc.)
   ↓
-Each asset type converted to synthetic units
+Each asset type converted to synthetic units using config rules
   ↓
 Grouped results written to Excel file
   ↓
@@ -332,12 +447,14 @@ Excel output: [Asset Type | Instance Count | Synthetic Units]
 - Test on Linux, macOS, Windows
 - Test against mock cloud provider APIs
 - Validate Excel file generation
+- Test config loading and validation
 - Cross-compile binaries for distribution
 
 ## Notes
 
 - Asset discovery across multi-cloud (AWS, Azure, GCP) requires handling different APIs and structures
 - Aggregation must be idempotent (same results with same input)
-- Synthetic unit calculations must be consistent and clearly documented
+- **Synthetic unit rules are config-driven**: Different customers can have different pricing models without code changes
 - Excel file should be human-readable with proper formatting
 - Handle large environments efficiently (pagination, concurrent API calls where possible)
+- Validate config file on load to catch rule definition errors early
