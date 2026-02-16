@@ -2,168 +2,263 @@
 
 ## Project Overview
 
-CloudCostCalaCLI is a PowerShell-based command-line tool for calculating cloud infrastructure costs. The project is in early stages with minimal established structure.
+CloudCostCalaCLI is a Go-based command-line tool for calculating cloud infrastructure costs across AWS, Azure, and GCP. The project is in early stages with minimal established structure.
 
 ## Development Setup
 
-### PowerShell Environment
-- **Language**: Support both PowerShell 7+ (cross-platform) and Windows PowerShell 5.1
-- **Compatibility Note**: Avoid PowerShell 7-only features (e.g., `using namespace` in certain contexts, native commands) to maintain Windows PowerShell compatibility
-- **File Extension**: `.ps1` for scripts, `.psm1` for modules, `.psd1` for module manifests
-- **Execution Policy**: May need to set execution policy for running scripts locally
-  ```powershell
-  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-  ```
-- **Testing**: Test on both PowerShell 7 and Windows PowerShell 5.1 when possible (especially before releases)
+### Go Environment
+- **Language**: Go 1.21+ (check `go.mod` for minimum version)
+- **Module**: Uses Go modules for dependency management (`go.mod`, `go.sum`)
+- **Build Output**: Binary executable (platform-specific or cross-compiled)
+
+### Initial Setup
+```bash
+# Initialize Go module (if not already done)
+go mod init github.com/ozwilder/CloudCostCalaCLI
+
+# Download dependencies
+go mod download
+
+# Verify dependencies
+go mod tidy
+```
 
 ## Project Structure (Recommended)
-
-While still being established, adopt this structure:
 
 ```
 CloudCostCalaCLI/
 ├── .github/
 │   └── copilot-instructions.md
-├── src/
-│   ├── CloudCostCalaCLI.psm1          # Main module file
-│   ├── functions/                      # Individual function files
-│   │   ├── Get-CloudCosts.ps1
-│   │   ├── Calculate-Cost.ps1
-│   │   └── ...
-│   └── classes/                        # PowerShell classes if used
-├── tests/
-│   └── *.Tests.ps1                    # Pester test files
-├── docs/
-│   └── *.md                            # User documentation
-├── CloudCostCalaCLI.psd1              # Module manifest (at root or in src/)
+├── cmd/
+│   └── cloudcostcala/              # Main CLI application
+│       └── main.go
+├── internal/
+│   ├── providers/                  # Cloud provider implementations
+│   │   ├── aws/
+│   │   │   ├── client.go
+│   │   │   └── costs.go
+│   │   ├── azure/
+│   │   │   ├── client.go
+│   │   │   └── costs.go
+│   │   └── gcp/
+│   │       ├── client.go
+│   │       └── costs.go
+│   ├── config/                     # Configuration file handling
+│   │   ├── config.go
+│   │   └── loader.go
+│   ├── calculator/                 # Cost calculation logic
+│   │   └── calculator.go
+│   └── models/                     # Data structures
+│       └── types.go
+├── pkg/                             # Public/exported packages (if any)
+│   └── output/                     # Output formatting (CSV, JSON, etc.)
+│       └── formatter.go
+├── tests/                           # Integration tests
+│   └── *.go
+├── config.example.json             # Example config file
+├── go.mod
+├── go.sum
+├── Makefile                        # Build/test automation
 ├── README.md
 └── LICENSE
 ```
 
 ## Build, Test & Validation
 
-### Testing (Pester)
-Testing approach is undecided but consider adopting Pester if test coverage becomes important. Setup would look like:
-```powershell
+### Building
+```bash
+# Build for current platform
+go build -o bin/cloudcostcala ./cmd/cloudcostcala
+
+# Build for specific platform
+GOOS=linux GOARCH=amd64 go build -o bin/cloudcostcala-linux ./cmd/cloudcostcala
+GOOS=darwin GOARCH=amd64 go build -o bin/cloudcostcala-macos ./cmd/cloudcostcala
+GOOS=windows GOARCH=amd64 go build -o bin/cloudcostcala.exe ./cmd/cloudcostcala
+
+# Using Makefile (when created)
+make build
+```
+
+### Running Tests
+```bash
 # Run all tests
-Invoke-Pester -Path ./tests
+go test ./...
 
-# Run specific test file
-Invoke-Pester -Path ./tests/Get-CloudCosts.Tests.ps1
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests with detailed coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+
+# Run specific test
+go test -run TestGetAWSCosts ./internal/providers/aws
 ```
 
-### Linting (PSScriptAnalyzer)
-When PSScriptAnalyzer is configured:
-```powershell
-# Analyze all scripts
-Invoke-ScriptAnalyzer -Path ./src -Recurse
+### Linting & Code Quality
+```bash
+# Run golangci-lint (if configured)
+golangci-lint run ./...
 
-# Analyze with custom rules
-Invoke-ScriptAnalyzer -Path ./src -IncludeRules @('PSUseConsistentWhitespace', 'PSAvoidUsingWildcardCharacters')
+# Format code
+go fmt ./...
+
+# Check for common mistakes
+go vet ./...
+
+# Run tests with race detection
+go test -race ./...
 ```
 
-### Building Module
-When a build process is established:
-```powershell
-# Typical approach: Copy files to output folder and validate module manifest
-$OutPath = "./build/CloudCostCalaCLI"
-Copy-Item -Path ./src/* -Destination $OutPath -Recurse
-Test-ModuleManifest -Path ./CloudCostCalaCLI.psd1
+### Dependencies
+```bash
+# Add a dependency
+go get github.com/user/package@latest
+
+# Update all dependencies
+go get -u ./...
+
+# Clean up unused dependencies
+go mod tidy
 ```
 
 ## Key Conventions
 
-### PowerShell Best Practices
-- **Naming**: Use approved verbs (Get, Set, New, Remove, etc.) + Singular nouns in function names
-  - Examples: `Get-CloudCosts`, `New-CostEstimate`, `Remove-Cache`
-- **Parameters**: Use `[Parameter()]` attributes with clear descriptions
-- **Documentation**: Use comment-based help with `.DESCRIPTION`, `.PARAMETER`, `.EXAMPLE`
-- **Error Handling**: Use `$ErrorActionPreference = 'Stop'` at function start or error handling with try/catch
+### Naming & Code Style
+- **Packages**: Use lowercase, single-word names when possible (`providers`, `config`, `calculator`)
+- **Functions**: Use CamelCase, exported functions start with uppercase (e.g., `GetAWSCosts`, `LoadConfig`)
+- **Interfaces**: Name with `-er` suffix convention (e.g., `CostProvider`, `ConfigLoader`)
+- **Constants**: Use UPPER_SNAKE_CASE for package-level constants
+- **Error handling**: Always check and handle errors; avoid `panic()` except in initialization
+- **Comments**: Export package documentation with `//` comments above exported identifiers
 
-### Module Structure Pattern
-```powershell
-# File: src/CloudCostCalaCLI.psm1 (or .psd1)
-# This would import all functions from the functions/ directory
+### Provider Interface Pattern
+All cloud providers should implement a common interface:
+```go
+// internal/providers/provider.go
+package providers
 
-# File: src/functions/Get-CloudCosts.ps1
-function Get-CloudCosts {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]$Provider  # AWS, Azure, GCP
-    )
-    
-    <#
-    .DESCRIPTION
-    Retrieves current cloud costs from specified provider.
-    
-    .EXAMPLE
-    Get-CloudCosts -Provider AWS
-    #>
-    
-    # Implementation
+type CostProvider interface {
+    GetCosts(ctx context.Context, opts Options) (*CostResult, error)
+    Validate(ctx context.Context) error
+}
+
+// Implement in internal/providers/aws/client.go, azure/client.go, gcp/client.go
+type AWSProvider struct {
+    client *aws.Client
+    config *Config
+}
+
+func (p *AWSProvider) GetCosts(ctx context.Context, opts Options) (*CostResult, error) {
+    // Implementation
 }
 ```
 
-### Cloud Provider Integration
-- **Supported Providers**: AWS, Azure, GCP (all three)
-- **Architecture**: Design for extensibility—consider using a provider interface/base class pattern or separate modules per provider
-- **Example Pattern**:
-  ```powershell
-  # src/providers/AWS/Get-AWSCosts.ps1
-  # src/providers/Azure/Get-AzureCosts.ps1
-  # src/providers/GCP/Get-GCPCosts.ps1
-  # src/CloudCostCalaCLI.psm1 (orchestrates all providers)
-  ```
-- **Authentication**: Use configuration files for credentials (see below)
-- **Config File Format**: Define schema for storing API credentials securely (consider encrypted configs for sensitive data)
+### Configuration Management
+- Load config from file path specified by environment variable or flag
+- Support JSON format for config files
+- Use `encoding/json` for parsing
+- Validate required fields on load
+- Don't commit actual config files with real credentials to repository
+
+### Error Handling
+- Define custom error types in `internal/errors/errors.go` if needed
+- Use `fmt.Errorf()` with wrapped errors: `fmt.Errorf("failed to load config: %w", err)`
+- Log errors with context (e.g., which provider failed)
+
+### Testing
+- Test files: `*_test.go` in the same package as code being tested
+- Use table-driven tests for multiple scenarios
+- Mock external dependencies (cloud provider SDKs) for unit tests
+- Use `testify/assert` or similar for cleaner assertions if desired
+```go
+// Example: internal/calculator/calculator_test.go
+func TestCalculateTotal(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    Input
+        expected float64
+    }{
+        {"single provider", Input{...}, 100.0},
+        {"multi provider", Input{...}, 250.0},
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result := Calculate(tt.input)
+            assert.Equal(t, tt.expected, result)
+        })
+    }
+}
+```
 
 ## Authentication & Configuration
 
 ### Configuration File Approach
-The tool uses configuration files to manage cloud provider credentials. Key considerations:
-
-- **Config File Location**: Define a standard location (e.g., `~/.CloudCostCalaCLI/config.json` or similar)
-- **File Format**: Consider JSON or YAML for config files
-- **Security**: Do NOT commit sensitive credentials to the repository
-  - Use `.gitignore` to exclude config files with real credentials
-  - Document how users should create their own config files
-  - Consider encryption for sensitive fields (API keys, secrets)
-- **Example Config Structure**:
+- **File Format**: JSON (defined in schema at `config.example.json`)
+- **Default Locations**: 
+  - Command line flag: `--config /path/to/config.json`
+  - Environment variable: `CLOUDCOSTCALA_CONFIG`
+  - Home directory: `~/.config/cloudcostcala/config.json`
+- **Security**: 
+  - Do NOT commit config files with real credentials
+  - Add `config.json` to `.gitignore`
+  - Document in README how to create config file
+  - Consider future support for encrypted sensitive fields
+- **Example Config**:
   ```json
   {
     "providers": {
       "aws": {
-        "accessKeyId": "***",
-        "secretAccessKey": "***",
+        "access_key_id": "***",
+        "secret_access_key": "***",
         "region": "us-east-1"
       },
       "azure": {
-        "subscriptionId": "***",
-        "clientId": "***",
-        "clientSecret": "***",
-        "tenantId": "***"
+        "subscription_id": "***",
+        "client_id": "***",
+        "client_secret": "***",
+        "tenant_id": "***"
       },
       "gcp": {
-        "projectId": "***",
-        "serviceAccountKey": "***"
+        "project_id": "***",
+        "service_account_key": "***"
       }
     }
   }
   ```
 
+## Dependencies to Consider
+
+- **AWS SDK**: `github.com/aws/aws-sdk-go-v2/...` (or v1)
+- **Azure SDK**: `github.com/Azure/azure-sdk-for-go`
+- **GCP SDK**: `cloud.google.com/go`
+- **CLI Framework**: `github.com/spf13/cobra` or `github.com/urfave/cli` (if complex CLI needed)
+- **Config**: `github.com/spf13/viper` (optional, for enhanced config management)
+- **Logging**: `go.uber.org/zap` or standard `log` package
+- **Testing**: `github.com/stretchr/testify` (optional, for assertions)
+
+## Documentation
+
+- **README.md**: Quick start, installation, basic usage examples
+- **Code Comments**: Document exported functions and types above their declarations
+- **Architecture Docs**: `docs/ARCHITECTURE.md` for high-level design (when applicable)
+- **Configuration**: `config.example.json` with comments explaining each field
+
 ## CI/CD (When Ready)
 
 When adding GitHub Actions:
-- Use `-ErrorAction Stop` in scripts to fail fast
-- Validate PowerShell syntax before merging
-- Test on both PowerShell 7 and Windows PowerShell 5.1 if possible
-- Consider running against mock/test cloud APIs to validate integration logic
+- Run tests on multiple Go versions (1.21+, latest)
+- Test on Linux, macOS, Windows
+- Cross-compile binaries for common platforms
+- Run linting (golangci-lint) before merge
+- Check for race conditions: `go test -race ./...`
+- Consider releasing binaries to GitHub Releases
 
 ## Notes
 
-- This is a new project with minimal initial structure—establish conventions early
-- **Cross-platform support**: PowerShell 5.1 and 7+ compatibility requires care with syntax and cmdlets
-- **Configuration security**: Protect sensitive credentials; use `.gitignore` for config files with real API keys
-- Testing approach (Pester) can be decided later if needed
-- Not planning PowerShell Gallery publication at this time, so can focus on internal quality
+- This is a new project being rewritten in Go for better performance and portability
+- Support all three cloud providers (AWS, Azure, GCP) from the start
+- Cross-platform binary distribution is a strength of Go
+- Use Go modules exclusively; no vendor directory needed unless required
+- Configuration file-based authentication (no environment variable parsing from shell scripts)
