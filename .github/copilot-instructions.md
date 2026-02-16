@@ -7,12 +7,14 @@ CloudCostCalaCLI is a PowerShell-based command-line tool for calculating cloud i
 ## Development Setup
 
 ### PowerShell Environment
-- **Language**: PowerShell (Core/7.0+ recommended, but compatible with Windows PowerShell 5.1)
+- **Language**: Support both PowerShell 7+ (cross-platform) and Windows PowerShell 5.1
+- **Compatibility Note**: Avoid PowerShell 7-only features (e.g., `using namespace` in certain contexts, native commands) to maintain Windows PowerShell compatibility
 - **File Extension**: `.ps1` for scripts, `.psm1` for modules, `.psd1` for module manifests
 - **Execution Policy**: May need to set execution policy for running scripts locally
   ```powershell
   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
   ```
+- **Testing**: Test on both PowerShell 7 and Windows PowerShell 5.1 when possible (especially before releases)
 
 ## Project Structure (Recommended)
 
@@ -40,17 +42,14 @@ CloudCostCalaCLI/
 
 ## Build, Test & Validation
 
-### Running Tests (Pester)
-When tests are added, use Pester:
+### Testing (Pester)
+Testing approach is undecided but consider adopting Pester if test coverage becomes important. Setup would look like:
 ```powershell
 # Run all tests
 Invoke-Pester -Path ./tests
 
 # Run specific test file
 Invoke-Pester -Path ./tests/Get-CloudCosts.Tests.ps1
-
-# Run with coverage
-Invoke-Pester -Path ./tests -CodeCoverage ./src
 ```
 
 ### Linting (PSScriptAnalyzer)
@@ -107,26 +106,64 @@ function Get-CloudCosts {
 ```
 
 ### Cloud Provider Integration
-- Structure code to support multiple providers: AWS, Azure, GCP
-- Use parameter validation or separate functions per provider
-- Consider using config files or environment variables for API credentials
+- **Supported Providers**: AWS, Azure, GCP (all three)
+- **Architecture**: Design for extensibility—consider using a provider interface/base class pattern or separate modules per provider
+- **Example Pattern**:
+  ```powershell
+  # src/providers/AWS/Get-AWSCosts.ps1
+  # src/providers/Azure/Get-AzureCosts.ps1
+  # src/providers/GCP/Get-GCPCosts.ps1
+  # src/CloudCostCalaCLI.psm1 (orchestrates all providers)
+  ```
+- **Authentication**: Use configuration files for credentials (see below)
+- **Config File Format**: Define schema for storing API credentials securely (consider encrypted configs for sensitive data)
 
-## Documentation
+## Authentication & Configuration
 
-- **README.md**: Keep focused on quick start and basic usage
-- **Module Help**: Embed help in function definitions using comment-based help
-- **docs/**: Create additional docs for architecture, API integration details, examples
+### Configuration File Approach
+The tool uses configuration files to manage cloud provider credentials. Key considerations:
+
+- **Config File Location**: Define a standard location (e.g., `~/.CloudCostCalaCLI/config.json` or similar)
+- **File Format**: Consider JSON or YAML for config files
+- **Security**: Do NOT commit sensitive credentials to the repository
+  - Use `.gitignore` to exclude config files with real credentials
+  - Document how users should create their own config files
+  - Consider encryption for sensitive fields (API keys, secrets)
+- **Example Config Structure**:
+  ```json
+  {
+    "providers": {
+      "aws": {
+        "accessKeyId": "***",
+        "secretAccessKey": "***",
+        "region": "us-east-1"
+      },
+      "azure": {
+        "subscriptionId": "***",
+        "clientId": "***",
+        "clientSecret": "***",
+        "tenantId": "***"
+      },
+      "gcp": {
+        "projectId": "***",
+        "serviceAccountKey": "***"
+      }
+    }
+  }
+  ```
 
 ## CI/CD (When Ready)
 
 When adding GitHub Actions:
 - Use `-ErrorAction Stop` in scripts to fail fast
 - Validate PowerShell syntax before merging
-- Run Pester tests on pull requests
-- Consider publishing to PowerShell Gallery when mature
+- Test on both PowerShell 7 and Windows PowerShell 5.1 if possible
+- Consider running against mock/test cloud APIs to validate integration logic
 
 ## Notes
 
 - This is a new project with minimal initial structure—establish conventions early
-- PowerShell 7+ (cross-platform) vs Windows PowerShell 5.1 (Windows-only) choice will affect compatibility
-- Cloud API authentication handling requires careful credential management
+- **Cross-platform support**: PowerShell 5.1 and 7+ compatibility requires care with syntax and cmdlets
+- **Configuration security**: Protect sensitive credentials; use `.gitignore` for config files with real API keys
+- Testing approach (Pester) can be decided later if needed
+- Not planning PowerShell Gallery publication at this time, so can focus on internal quality
